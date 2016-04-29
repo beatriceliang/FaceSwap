@@ -35,6 +35,7 @@ int main(int argc, char *argv[]) {
 	std::vector<cv::Rect> objects;
 	std::vector<cv::Rect> swapObjects;
 
+	//detect face in the image
 	cascade2.detectMultiScale(swapping,swapObjects,1.1,1,0,cv::Size(30,30),cv::Size(swapping.size().width/2,swapping.size().height/2));
 
 	capdev = new cv::VideoCapture(0);
@@ -53,17 +54,27 @@ int main(int argc, char *argv[]) {
 		*capdev >> frame; // get a new frame from the camera, treat as a stream
 		resize(frame, frame, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
 		cv::cvtColor(frame,gray,CV_BGR2GRAY);
+		//detect face in the video
 		cascade.detectMultiScale(frame,objects,1.1,1,0,cv::Size(30,30),cv::Size(frame.size().width/2,frame.size().height/2));
 		if(objects.size()==1){
 			printf("found face\n");
-			rectangle(frame,cv::Point(objects[0].x,objects[0].y),cv::Point(objects[0].x+objects[0].width,objects[0].y+objects[0].height),cv::Scalar(0,0,255));
+			//rectangle(frame,cv::Point(objects[0].x,objects[0].y),cv::Point(objects[0].x+objects[0].width,objects[0].y+objects[0].height),cv::Scalar(0,0,255));
 		}
 		cv::imshow("MyFace", frame);
-		
+
+		//replace the face in the image with the face in the video
 		cv::Mat replacingFace;
 		replacingFace = swapping(cv::Rect(swapObjects[0].x,swapObjects[0].y,swapObjects[0].width,swapObjects[0].height));
+		
+		//need to resize the face in image to face in video
 		resize(replacingFace,replacingFace,cv::Size(objects[0].width,objects[0].height),0,0,cv::INTER_CUBIC);
-		replacingFace.copyTo(frame(objects[0]));
+		int faceHeight = objects[0].height;
+		int faceWidth = objects[0].width;
+
+		//copy ellipse around face in image to the face in video
+		cv::Mat mask = cv::Mat::zeros(faceHeight,faceWidth,CV_8UC1);
+		cv::ellipse(mask,cv::Point(faceWidth/2,faceHeight/2),cv::Size(faceWidth/2,faceHeight/2),0,0,360,cv::Scalar(255),CV_FILLED,8,0);
+		replacingFace.copyTo(frame(objects[0]),mask);
 
 		cv::imshow("Beyonce", frame);
 
