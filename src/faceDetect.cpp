@@ -18,13 +18,24 @@
 
 /*Main function*/
 int main(int argc, char *argv[]) {
+	char *filename = "faces/org/img7.jpg";
+	cv::Mat swapping;
+	swapping = cv::imread(filename);
 	cv::VideoCapture *capdev;
 	cv::CascadeClassifier cascade;
+	cv::CascadeClassifier cascade2;
 	if(!cascade.load("faces/haarcascade_frontalface_alt.xml")){
 		printf("Can't load cascade properly\n");
 		return(1);
 	}
+	if(!cascade2.load("faces/haarcascade_frontalface_alt.xml")){
+		printf("Can't load cascade properly\n");
+		return(1);
+	}
 	std::vector<cv::Rect> objects;
+	std::vector<cv::Rect> swapObjects;
+
+	cascade2.detectMultiScale(swapping,swapObjects,1.1,1,0,cv::Size(30,30),cv::Size(swapping.size().width/2,swapping.size().height/2));
 
 	capdev = new cv::VideoCapture(0);
 	if( !capdev->isOpened() ) {
@@ -42,13 +53,19 @@ int main(int argc, char *argv[]) {
 		*capdev >> frame; // get a new frame from the camera, treat as a stream
 		resize(frame, frame, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
 		cv::cvtColor(frame,gray,CV_BGR2GRAY);
-		cascade.detectMultiScale(gray,objects,1.1,1,0,cv::Size(30,30),cv::Size(frame.size().width/2,frame.size().height/2));
-
+		cascade.detectMultiScale(frame,objects,1.1,1,0,cv::Size(30,30),cv::Size(frame.size().width/2,frame.size().height/2));
 		if(objects.size()==1){
-			printf("found bag\n");
+			printf("found face\n");
 			rectangle(frame,cv::Point(objects[0].x,objects[0].y),cv::Point(objects[0].x+objects[0].width,objects[0].y+objects[0].height),cv::Scalar(0,0,255));
 		}
-		cv::imshow("Video", frame);
+		cv::imshow("MyFace", frame);
+		
+		cv::Mat replacingFace;
+		replacingFace = swapping(cv::Rect(swapObjects[0].x,swapObjects[0].y,swapObjects[0].width,swapObjects[0].height));
+		resize(replacingFace,replacingFace,cv::Size(objects[0].width,objects[0].height),0,0,cv::INTER_CUBIC);
+		replacingFace.copyTo(frame(objects[0]));
+
+		cv::imshow("Beyonce", frame);
 
 		//press q to quit
 		if(keyPressed==113)
@@ -58,7 +75,7 @@ int main(int argc, char *argv[]) {
  
 
 	// get rid of the window
-	//cv::destroyWindow("test");
+	cv::destroyWindow("test");
  
 	// terminate the program
 	printf("Terminating\n");
