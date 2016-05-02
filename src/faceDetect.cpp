@@ -15,9 +15,15 @@
 #include <math.h>
 #include "opencv2/opencv.hpp"
 
+ typedef struct Tears{
+ 	int x;
+ 	int y;
+ 	int state;
+ }Tear;
+
  void replaceFace(cv::Mat frame, cv::Mat swapping, std::vector<cv::Rect> objects, std::vector<cv::Rect> swapObjects, float theta){
  	float thetaDegrees = (theta)*(180/M_PI);
- 	printf("theta %f\n",thetaDegrees);
+ 	//printf("theta %f\n",thetaDegrees);
  	int i,j;
  	//replace the face in the image with the face in the video
 	cv::Mat replacingFace;
@@ -83,8 +89,110 @@
 	float theta = atan2(eyeVectory,eyeVectorx);
 
 	rectangle(frame,cv::Point(eye1x,eye1y),cv::Point(eye1x+eye1Width,eye1y+eye1Height),cv::Scalar(0,0,255));
-	line(frame,cv::Point(centerEye1x,centerEye1y),cv::Point(centerEye2x,centerEye2y),cv::Scalar(0,0,255));
+	rectangle(frame,cv::Point(eye2x,eye2y),cv::Point(eye2x+eye2Width,eye2y+eye2Height),cv::Scalar(0,0,255));
+	//line(frame,cv::Point(centerEye1x,centerEye1y),cv::Point(centerEye2x,centerEye2y),cv::Scalar(0,0,255));
  	return theta;
+ }
+
+ void addTeardrop(cv::Mat frame, cv::Mat teardrop, std::vector<cv::Rect> eyeObjects,
+ 				 Tear *tears, int numberOfTears,int frameNumber, int faceHeight, int* differences){
+ 	int i,j;
+ 	int x1,y1,x2,y2;
+ 	int numberOf1s;
+ 	int fWidth = frame.size().width;
+ 	int fHeight = frame.size().height;
+ 	resize(teardrop,teardrop,cv::Size(fWidth/50,fHeight/30),0,0,cv::INTER_CUBIC);
+ 	int tWidth = teardrop.size().width;
+ 	int tHeight = teardrop.size().height;
+
+ 	int speed = rand()%tHeight+10;
+
+ 	cv::Mat mask = cv::Mat::zeros(tHeight,tWidth,CV_8UC1);
+ 	for(i = 0; i<tHeight; i++){
+ 		for(j = 0; j<tWidth; j++){
+ 			cv::Vec3b color = teardrop.at<cv::Vec3b>(cv::Point(j,i));
+ 			if(color[0]<250 && color[1]<250 && color[3]<250){
+ 				mask.at<uchar>(i,j)=255;
+ 				color[0] = 255;
+ 				color[1] = 0;
+ 				color[2] = 0;
+ 				teardrop.at<cv::Vec3b>(cv::Point(j,i)) = color;
+ 			}
+ 		}
+ 	}
+ 	x1 = eyeObjects[0].x+eyeObjects[0].width/2;
+ 	y1 = eyeObjects[0].y+eyeObjects[0].height/1.5;
+ 	x2 = eyeObjects[1].x+eyeObjects[1].width/2;
+ 	y2 = eyeObjects[1].y+eyeObjects[1].height/1.5;
+ 	srand(time(NULL));
+ 	if(frameNumber==0){
+ 		for(i = 0; i<numberOfTears; i++){
+ 			if(i>=numberOfTears/2){
+ 				tears[i].x = x2;
+ 				tears[i].y = y2;
+ 			}
+ 			else{
+ 				tears[i].x = x1;
+ 				tears[i].y = y1;
+ 			}
+ 			tears[i].state = 0;
+ 			differences[i] = 0;
+ 		}
+ 		//printf("done with frame 0\n");
+ 	}
+ 	else{
+ 		numberOf1s = 0;
+ 		for(i = 0; i<numberOfTears/2; i++){
+ 			if(tears[i].state==0){
+				tears[i].x = x1;
+ 				tears[i].y = y1;
+ 				if(numberOf1s==0){
+ 					tears[i].state = 1;
+ 					numberOf1s++;
+ 				}
+ 			}
+ 		}
+ 		numberOf1s = 0;
+ 		for(i = numberOfTears/2; i<numberOfTears; i++){
+ 			if(tears[i].state==0){
+ 				tears[i].x = x2;
+ 				tears[i].y = y2;
+ 				if(numberOf1s==0){
+ 					tears[i].state = 1;
+ 					numberOf1s++;
+ 				}
+ 			}
+ 		}
+ 	}
+ 	for(i = 0; i<numberOfTears; i++){
+ 		if(tears[i].state==1){
+			differences[i]+=speed;
+			if(i>=numberOfTears/2){
+				tears[i].y = y2+differences[i];
+			}
+			else{
+				tears[i].y = y1+differences[i];
+			}
+			tears[i].y = y1+differences[i];
+			if(tears[i].y>=faceHeight || tears[i].y>=frame.size().height){
+				if(i>=numberOfTears/2){
+					tears[i].x = x2;
+					tears[i].y = y2;
+				}
+				else{
+					tears[i].x = x1;
+					tears[i].y = y1;
+				}
+				tears[i].state = 0;
+				differences[i] = 0;
+			}
+		}
+ 	}
+ 
+ 	for(i = 0; i<numberOfTears; i++){
+ 		//printf("i %d x %d y %d \n",i,tears[i].x,tears[i].y);
+ 		teardrop.copyTo(frame(cv::Rect(tears[i].x,tears[i].y,tWidth,tHeight)),mask);
+ 	}
  }
 
 
@@ -92,8 +200,10 @@
 int main(int argc, char *argv[]) {
 	int i;
 	char *filename = "faces/org/img7.jpg";
-	cv::Mat swapping;
+	char *filename2 = "faces/org/teardrop2.png";
+	cv::Mat swapping,teardrop;
 	swapping = cv::imread(filename);
+	teardrop = cv::imread(filename2);
 
 	cv::VideoCapture *capdev;
 	cv::CascadeClassifier cascade; //for video
@@ -126,7 +236,13 @@ int main(int argc, char *argv[]) {
 		return(-1);
 	}
 
+	//allocate space for tear particles;
+	int numberOfTears = 14;
+ 	Tear* tears = (Tear*) malloc(sizeof(Tear)*numberOfTears);
+ 	int *differences = (int*) malloc(sizeof(int)*numberOfTears);
+
 	cv::namedWindow("Video", 1);
+	int frameNumber = 0;
 
 	for(;;) {
 		char keyPressed = cv::waitKey(10);
@@ -152,6 +268,8 @@ int main(int argc, char *argv[]) {
 		if(eyeObjects.size()==2){
 			printf("found eyes\n");
 			theta = findAngle(frame2,eyeObjects);
+			addTeardrop(frame2,teardrop,eyeObjects,tears,numberOfTears,frameNumber,objects[0].y+objects[0].height,differences);
+			frameNumber++;
 		}
 
 		//replace face in video with face in image
@@ -159,7 +277,7 @@ int main(int argc, char *argv[]) {
 		if(objects.size()==1 && swapObjects.size()==1){
 			replaceFace(frame,swapping,objects,swapObjects,theta);
 		}
-		cv::imshow("Beyonce", frame);
+		//cv::imshow("Beyonce", frame);
 
 		//press q to quit
 		if(keyPressed==113)
@@ -175,5 +293,7 @@ int main(int argc, char *argv[]) {
 	printf("Terminating\n");
 	delete capdev;
 
+	free(tears);
+	
 	return(0);
 }
