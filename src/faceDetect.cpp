@@ -290,15 +290,6 @@ void oilPaint(cv::Mat frame){
 			frame.at<cv::Vec3b>(cv::Point(x,y)) = newColor;
 
 		}
-		//blur some more
-		int offsetx = rand()%20 - 10;
-		int offsety = rand()%20 - 10;
-		int curx = x+offsetx;
-		int cury = y+offsety;
-		if(curx >=0 && curx<frame.size().width && cury>=0 && cury<frame.size().height){
-			frame.at<cv::Vec3b>(cv::Point(curx,cury)) = copy.at<cv::Vec3b>(cv::Point(x,y));
-
-		}
 	}
 
 }
