@@ -41,28 +41,31 @@
 	int faceWidth = objects[0].width;
 	int centerx = faceWidth/2;
 	int centery = faceHeight/2;
-	//taken from stackoverflow
-	//get rotation matrix for rotating image around its center
-	cv::Mat rot = cv::getRotationMatrix2D(cv::Point(centerx,centery),thetaDegrees,1.0);
 
-  //finally rotate image
+  //get rotation matrix for rotating image around its center
+	cv::Mat rot = cv::getRotationMatrix2D(cv::Point(centerx,centery),thetaDegrees,1.0);
   cv::warpAffine(swapping,rotatedFace,rot,swapping.size());
 
-
+  //remove white background
   cv::Mat mask, grey;
   cvtColor(rotatedFace, grey, CV_BGR2GRAY);
-  threshold(grey, mask, 190, 255, cv::THRESH_BINARY_INV);
+  threshold(grey, mask, 210, 255, cv::THRESH_BINARY_INV);
 
+  //remove black background as a result of rotation
 	rotatedFace.copyTo(maskedFace,mask);
   cvtColor(maskedFace,grey, CV_BGR2GRAY);
   threshold(grey, mask, 0, 255, cv::THRESH_BINARY);
 
-  // std::cout << "objects" << objects.size() <<std::endl;
-  // std::cout << "maskedFace" << maskedFace.size()<<std::endl;
+  //copy to frame
   int img_x = objects[0].x+centerx-maskedFace.size().width/2;
   int img_y = objects[0].y+centery-maskedFace.size().height/2;
-  if (img_x < frame.size().width && img_x > 0 && img_y < frame.size().height && img_y >0)
-    rotatedFace.copyTo(frame(cv::Rect(img_x,img_y,rotatedFace.size().width,rotatedFace.size().height)),mask);
+  int img_h = rotatedFace.size().height;
+  int img_w = rotatedFace.size().width;
+  if (img_x < frame.size().width && img_x > 0 &&
+      img_y < frame.size().height && img_y >0 &&
+      img_h+img_y < frame.size().height &&
+      img_w+img_x < frame.size().width)
+    rotatedFace.copyTo(frame(cv::Rect(img_x,img_y,img_w,img_h)),mask);
  }
 
  /* Return the angle made by the line between center of two eyes
@@ -234,7 +237,7 @@ void oilPaint(cv::Mat frame){
 	int x,y,i,j,k;
 	int maxIntensity,intensity,maxIndex;
 	int temp;
-	int filter = 3;
+	int filter = 1;
 	int levels = 30;
 	int red[levels+1];
 	int green[levels+1];
@@ -288,8 +291,12 @@ void oilPaint(cv::Mat frame){
 /*Main function*/
 int main(int argc, char *argv[]) {
 	int i;
-	char *filename = "../data/face.jpg";
-	char *filename2 = "../data/faces/org/teardrop2.png";
+  char filename[256], filename2[256];
+  strcpy(filename, "../data/face.jpg");
+	strcpy(filename2,"../data/teardrop2.png");
+  if (argc > 1){
+    strcpy(filename,argv[1]);
+  }
 	cv::Mat swapping,teardrop;
 	swapping = cv::imread(filename);
 	teardrop = cv::imread(filename2);
@@ -299,7 +306,7 @@ int main(int argc, char *argv[]) {
 	cv::CascadeClassifier eyeCascade; //for eye
 
 	if(!cascade.load("../data/faces/haarcascade_frontalface_alt.xml")){
-		printf("Can't load cascade1 properly\n");
+		printf("Can't load face cascade properly\n");
 		return(1);
 	}
 
@@ -325,7 +332,7 @@ int main(int argc, char *argv[]) {
 	int numberOfTears = 14;
  	Tear* tears = (Tear*) malloc(sizeof(Tear)*numberOfTears);
  	int *differences = (int*) malloc(sizeof(int)*numberOfTears);
-
+  char state = 'f';
 	cv::namedWindow("Video", 1);
 	int frameNumber = 0;
 	int oilP = 0;
@@ -339,32 +346,31 @@ int main(int argc, char *argv[]) {
 		*capdev >> frame2;
 
 		resize(frame, frame, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
-		resize(frame2, frame2, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
+		// resize(frame2, frame2, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
 
 		//detect face in the video
 		cascade.detectMultiScale(frame,objects,1.1,1,0,cv::Size(100,100),cv::Size(frame.size().width/2,frame.size().height/2));
-		//detect eyes in the video
+    //detect eyes in the video
 		eyeCascade.detectMultiScale(frame,eyeObjects,1.1,1,0,cv::Size(30,30),cv::Size(frame.size().width/2,frame.size().height/2));
 
 		float theta =0;
 
 		//If face is not detected or face is too far away then
 		//show an oil painting rendering of the video
-		if(objects.size()==0 || objects[0].width/(float)frame.size().width<0.2){
-			printf("Face far away or no face detected\n");
-			oilPaint(frame2);
+		if(state =='o'){
+			oilPaint(frame);
 			oilP = 1;
 		}
 
 
 		//find angle of face with the help of eyes
 		if(eyeObjects.size()==2){
-			//printf("found eyes\n");
-			theta = findAngle(frame2,eyeObjects);
+      if (state == 'f')
+			   theta = findAngle(frame,eyeObjects);
 			//also if you can detect eyes, and your video is not oilPainted
 			//cry because you are perpetually sad
-			if(oilP==0){
-				addTeardrop(frame2,teardrop,eyeObjects,tears,numberOfTears,frameNumber,objects[0].y+objects[0].height,differences);
+			if(state =='c'){
+				addTeardrop(frame,teardrop,eyeObjects,tears,numberOfTears,frameNumber,objects[0].y+objects[0].height,differences);
 			}
 			frameNumber++;
 		}
@@ -375,16 +381,21 @@ int main(int argc, char *argv[]) {
 			frameNumber = 0;
 		}
 
-		//show frame2 with oilpainting/teardrop in a separate window
-		cv::imshow("MyFace", frame2);
-
 		//replace face in video with face in image
-		//show swapped face in a aseparate window
-		if(objects.size()==1 && swapObjects.size()==1){
+		if(objects.size()==1 && swapObjects.size()==1 && state == 'f'){
 			replaceFace(frame,swapping,objects,swapObjects,theta);
 		}
-		cv::imshow("Swap Face", frame);
 
+    if(keyPressed =='f'){
+      state = 'f';
+    }
+    else if(keyPressed == 'c'){
+      state = 'c';
+    }
+    else if(keyPressed == 'o'){
+      state = 'o';
+    }
+    cv::imshow("Face",frame);
 
 		//press q to quit
 		if(keyPressed==113)
