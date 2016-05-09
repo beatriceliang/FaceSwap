@@ -4,7 +4,7 @@
  * a face from an image. This swapping is rotation invariant
  * as long as the faces are detected in the video and the image
  * and the eyes are detected in the video. Rotation invariance
- * is implemented using the eye locations. 
+ * is implemented using the eye locations.
  * The other window will show teardrops running down the face
  * when the face is detected. Otherwise, we will see an oil painted
  * rendering of the video. Teardrops are implemented using a version
@@ -32,40 +32,37 @@
  void replaceFace(cv::Mat frame, cv::Mat swapping, std::vector<cv::Rect> objects, std::vector<cv::Rect> swapObjects, float theta){
  	float thetaDegrees = (theta)*(180/M_PI);
  	int i,j;
- 	//replace the face in the image with the face in the video
-	cv::Mat replacingFace;
-	replacingFace = swapping(cv::Rect(swapObjects[0].x,swapObjects[0].y,swapObjects[0].width,swapObjects[0].height));
-	
+  cv::Mat rotatedFace, maskedFace;
 	//need to resize the face in image to face in video
-	resize(replacingFace,replacingFace,cv::Size(objects[0].width,objects[0].height),0,0,cv::INTER_CUBIC);
-	int faceHeight = objects[0].height;
+  float ratio = (float)objects[0].width/(swapObjects[0].width);
+  resize(swapping,swapping,cv::Size(swapping.size().width*ratio,swapping.size().height*ratio),0,0,cv::INTER_CUBIC);
+
+  int faceHeight = objects[0].height;
 	int faceWidth = objects[0].width;
 	int centerx = faceWidth/2;
 	int centery = faceHeight/2;
-
 	//taken from stackoverflow
 	//get rotation matrix for rotating image around its center
 	cv::Mat rot = cv::getRotationMatrix2D(cv::Point(centerx,centery),thetaDegrees,1.0);
-	//determine bounding rectangle
-	cv::Rect bbox = cv::RotatedRect(cv::Point(centerx,centery),replacingFace.size(),thetaDegrees).boundingRect();
-	//adjust transformation matrix
-	rot.at<double>(0,2) += bbox.width/2.0 - centerx;
-    rot.at<double>(1,2) += bbox.height/2.0 - centery;
-    //finally rotate image
-    cv::Mat rotatedFace;
-    cv::warpAffine(replacingFace,rotatedFace,rot,bbox.size());
-    resize(rotatedFace,rotatedFace,cv::Size(objects[0].width,objects[0].height),0,0,cv::INTER_CUBIC);
 
-	//copy ellipse around face in image to the face in video
-	cv::Mat mask = cv::Mat::zeros(faceHeight,faceWidth,CV_8UC1);
-	cv::ellipse(mask,cv::Point(faceWidth/2,faceHeight/2),cv::Size(faceWidth/2,faceHeight/2),0,0,360,cv::Scalar(255),CV_FILLED,8,0);
-	//rotate mask as well
-	cv::Mat rotatedMask;
-	cv::warpAffine(mask,rotatedMask,rot,bbox.size());
-	resize(rotatedMask,rotatedMask,cv::Size(objects[0].width,objects[0].height),0,0,cv::INTER_CUBIC);
+  //finally rotate image
+  cv::warpAffine(swapping,rotatedFace,rot,swapping.size());
 
-	//copy rotated face onto video with the help of rotated mask
-	rotatedFace.copyTo(frame(objects[0]),rotatedMask);
+
+  cv::Mat mask, grey;
+  cvtColor(rotatedFace, grey, CV_BGR2GRAY);
+  threshold(grey, mask, 190, 255, cv::THRESH_BINARY_INV);
+
+	rotatedFace.copyTo(maskedFace,mask);
+  cvtColor(maskedFace,grey, CV_BGR2GRAY);
+  threshold(grey, mask, 0, 255, cv::THRESH_BINARY);
+
+  // std::cout << "objects" << objects.size() <<std::endl;
+  // std::cout << "maskedFace" << maskedFace.size()<<std::endl;
+  int img_x = objects[0].x+centerx-maskedFace.size().width/2;
+  int img_y = objects[0].y+centery-maskedFace.size().height/2;
+  if (img_x < frame.size().width && img_x > 0 && img_y < frame.size().height && img_y >0)
+    rotatedFace.copyTo(frame(cv::Rect(img_x,img_y,rotatedFace.size().width,rotatedFace.size().height)),mask);
  }
 
  /* Return the angle made by the line between center of two eyes
@@ -92,12 +89,7 @@
 	else{
 		eyeVectory = centerEye2y - centerEye1y;
 	}
-	float theta = atan2(eyeVectory,eyeVectorx);
-
-	//rectangle(frame,cv::Point(eye1x,eye1y),cv::Point(eye1x+eye1Width,eye1y+eye1Height),cv::Scalar(0,0,255));
-	//rectangle(frame,cv::Point(eye2x,eye2y),cv::Point(eye2x+eye2Width,eye2y+eye2Height),cv::Scalar(0,0,255));
-	//line(frame,cv::Point(centerEye1x,centerEye1y),cv::Point(centerEye2x,centerEye2y),cv::Scalar(0,0,255));
- 	return theta;
+	return atan2(eyeVectory,eyeVectorx);
  }
 
  /* Adds tears to the video. The parameters are as follows:
@@ -228,22 +220,21 @@
 			}
 		}
  	}
- 	
+
  	//finally draw the tears
  	for(i = 0; i<numberOfTears; i++){
- 		//printf("i %d x %d y %d \n",i,tears[i].x,tears[i].y);
  		teardrop.copyTo(frame(cv::Rect(tears[i].x,tears[i].y,tWidth,tHeight)),mask);
  	}
  }
 
-//creates an oil painting effect on the frame 
+//creates an oil painting effect on the frame
 //algotithm taken from https://softwarebydefault.com/
 void oilPaint(cv::Mat frame){
 	cv::Mat gray;
 	int x,y,i,j,k;
 	int maxIntensity,intensity,maxIndex;
 	int temp;
-	int filter = 1;
+	int filter = 3;
 	int levels = 30;
 	int red[levels+1];
 	int green[levels+1];
@@ -297,36 +288,32 @@ void oilPaint(cv::Mat frame){
 /*Main function*/
 int main(int argc, char *argv[]) {
 	int i;
-	char *filename = "faces/org/img7.jpg";
-	char *filename2 = "faces/org/teardrop2.png";
+	char *filename = "../data/face.jpg";
+	char *filename2 = "../data/faces/org/teardrop2.png";
 	cv::Mat swapping,teardrop;
 	swapping = cv::imread(filename);
 	teardrop = cv::imread(filename2);
 
 	cv::VideoCapture *capdev;
 	cv::CascadeClassifier cascade; //for video
-	cv::CascadeClassifier cascade2; //for image
 	cv::CascadeClassifier eyeCascade; //for eye
 
-	if(!cascade.load("faces/haarcascade_frontalface_alt.xml")){
+	if(!cascade.load("../data/faces/haarcascade_frontalface_alt.xml")){
 		printf("Can't load cascade1 properly\n");
 		return(1);
 	}
-	if(!cascade2.load("faces/haarcascade_frontalface_alt.xml")){
-		printf("Can't load cascade2 properly\n");
-		return(1);
-	}
-	if(!eyeCascade.load("faces/haarcascade_eye.xml")){
+
+	if(!eyeCascade.load("../data/faces/haarcascade_eye.xml")){
 		printf("Can't load  eye cascade properly\n");
 		return(1);
 	}
 
-	std::vector<cv::Rect> objects; //for video 
+	std::vector<cv::Rect> objects; //for video
 	std::vector<cv::Rect> swapObjects; //for image
 	std::vector<cv::Rect> eyeObjects; //for eyes
 
 	//detect face in the image
-	cascade2.detectMultiScale(swapping,swapObjects,1.1,1,0,cv::Size(30,30),cv::Size(swapping.size().width/2,swapping.size().height/2));
+  cascade.detectMultiScale(swapping, swapObjects);
 
 	capdev = new cv::VideoCapture(0);
 	if( !capdev->isOpened() ) {
@@ -347,7 +334,7 @@ int main(int argc, char *argv[]) {
 		char keyPressed = cv::waitKey(10);
 
 		cv::Mat frame,frame2;
-		
+
 		*capdev >> frame; // get a new frame from the camera, treat as a stream
 		*capdev >> frame2;
 
@@ -358,12 +345,8 @@ int main(int argc, char *argv[]) {
 		cascade.detectMultiScale(frame,objects,1.1,1,0,cv::Size(100,100),cv::Size(frame.size().width/2,frame.size().height/2));
 		//detect eyes in the video
 		eyeCascade.detectMultiScale(frame,eyeObjects,1.1,1,0,cv::Size(30,30),cv::Size(frame.size().width/2,frame.size().height/2));
-		
+
 		float theta =0;
-		if(objects.size()==1){
-			//printf("found face\n");
-			//rectangle(frame2,cv::Point(objects[0].x,objects[0].y),cv::Point(objects[0].x+objects[0].width,objects[0].y+objects[0].height),cv::Scalar(0,0,255));
-		}
 
 		//If face is not detected or face is too far away then
 		//show an oil painting rendering of the video
@@ -385,7 +368,7 @@ int main(int argc, char *argv[]) {
 			}
 			frameNumber++;
 		}
-		//When eye not detected change frameNumber to 0, so all 
+		//When eye not detected change frameNumber to 0, so all
 		//tears have state 0 (the position of all the tears will now
 		//be at the eye again)
 		else{
@@ -400,24 +383,24 @@ int main(int argc, char *argv[]) {
 		if(objects.size()==1 && swapObjects.size()==1){
 			replaceFace(frame,swapping,objects,swapObjects,theta);
 		}
-		cv::imshow("Beyonce", frame);
-	
+		cv::imshow("Swap Face", frame);
+
 
 		//press q to quit
 		if(keyPressed==113)
 			break;
 	}
 
- 
+
 
 	// get rid of the window
 	cv::destroyWindow("test");
- 
+
 	// terminate the program
 	printf("Terminating\n");
 	delete capdev;
 
 	free(tears);
-	
+
 	return(0);
 }
