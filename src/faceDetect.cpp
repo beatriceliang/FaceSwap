@@ -343,10 +343,8 @@ int main(int argc, char *argv[]) {
 		cv::Mat frame,frame2;
 
 		*capdev >> frame; // get a new frame from the camera, treat as a stream
-		*capdev >> frame2;
 
 		resize(frame, frame, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
-		// resize(frame2, frame2, cv::Size(640, 360), 0, 0, cv::INTER_CUBIC);
 
 		//detect face in the video
 		cascade.detectMultiScale(frame,objects,1.1,1,0,cv::Size(100,100),cv::Size(frame.size().width/2,frame.size().height/2));
@@ -355,11 +353,10 @@ int main(int argc, char *argv[]) {
 
 		float theta =0;
 
-		//If face is not detected or face is too far away then
+
 		//show an oil painting rendering of the video
 		if(state =='o'){
 			oilPaint(frame);
-			oilP = 1;
 		}
 
 
@@ -367,8 +364,8 @@ int main(int argc, char *argv[]) {
 		if(eyeObjects.size()==2){
       if (state == 'f')
 			   theta = findAngle(frame,eyeObjects);
-			//also if you can detect eyes, and your video is not oilPainted
-			//cry because you are perpetually sad
+
+			//cry because you sad
 			if(state =='c'){
 				addTeardrop(frame,teardrop,eyeObjects,tears,numberOfTears,frameNumber,objects[0].y+objects[0].height,differences);
 			}
