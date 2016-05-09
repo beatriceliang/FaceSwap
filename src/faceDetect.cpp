@@ -116,7 +116,7 @@
  	resize(teardrop,teardrop,cv::Size(fWidth/50,fHeight/30),0,0,cv::INTER_CUBIC);
  	int tWidth = teardrop.size().width;
  	int tHeight = teardrop.size().height;
-
+  srand(time(NULL));
  	//speed of the tear
  	int speed = rand()%tHeight+10;
 
@@ -138,7 +138,7 @@
  	y1 = eyeObjects[0].y+eyeObjects[0].height/1.5;
  	x2 = eyeObjects[1].x+eyeObjects[1].width/2;
  	y2 = eyeObjects[1].y+eyeObjects[1].height/1.5;
- 	srand(time(NULL));
+
 
  	//Initialize tear fields, states and differences when
  	//eyes are first detected, that is when frameNumber = 0;
@@ -231,7 +231,7 @@
  }
 
 //creates an oil painting effect on the frame
-//algotithm taken from https://softwarebydefault.com/
+//algorithm taken from https://softwarebydefault.com/
 void oilPaint(cv::Mat frame){
 	cv::Mat gray;
 	int x,y,i,j,k;
@@ -368,14 +368,16 @@ int main(int argc, char *argv[]) {
 			//cry because you sad
 			if(state =='c'){
 				addTeardrop(frame,teardrop,eyeObjects,tears,numberOfTears,frameNumber,objects[0].y+objects[0].height,differences);
-			}
-			frameNumber++;
+        frameNumber++;
+      }
+
 		}
 		//When eye not detected change frameNumber to 0, so all
 		//tears have state 0 (the position of all the tears will now
 		//be at the eye again)
 		else{
-			frameNumber = 0;
+      if (state == 'c')
+			   frameNumber = 0;
 		}
 
 		//replace face in video with face in image
@@ -398,7 +400,6 @@ int main(int argc, char *argv[]) {
 		if(keyPressed==113)
 			break;
 	}
-
 
 
 	// get rid of the window
